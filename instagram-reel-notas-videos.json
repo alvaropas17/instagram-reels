@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "guardar-reel-126b7352f15e7b0d",
+        "path": "guardar-reel",
         "options": {}
       },
       "id": "f5ffb004-57be-4232-b671-b184bda22db8",
@@ -377,7 +377,7 @@
         "databaseId": {
           "__rl": true,
           "mode": "id",
-          "value": "69949705-f037-4e63-8cf2-07da1c2576f0"
+          "value": "<NOTION_DATABASE_ID>"
         },
         "title": "={{ $json.titulo }}",
         "propertiesUi": {
@@ -508,7 +508,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'completado', status: 'done', message: 'Listo' };\n\n// El $json actual es la respuesta del PATCH; la URL de la pagina sale de \"Guardar en Notion\".\nlet notionPageUrl = '';\ntry {\n  const guardado = $('Guardar en Notion').first();\n  notionPageUrl = (guardado && guardado.json && guardado.json.url) ? guardado.json.url : '';\n} catch (e) {\n  notionPageUrl = '';\n}\npayload.notionPageUrl = notionPageUrl;\npayload.notionDatabaseUrl = 'https://www.notion.so/69949705f0374e638cf207da1c2576f0';\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'completado', status: 'done', message: 'Listo' };\n\n// El $json actual es la respuesta del PATCH; la URL de la pagina sale de \"Guardar en Notion\".\nlet notionPageUrl = '';\ntry {\n  const guardado = $('Guardar en Notion').first();\n  notionPageUrl = (guardado && guardado.json && guardado.json.url) ? guardado.json.url : '';\n} catch (e) {\n  notionPageUrl = '';\n}\npayload.notionPageUrl = notionPageUrl;\npayload.notionDatabaseUrl = 'https://www.notion.so/<NOTION_DATABASE_ID>';\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
       },
       "id": "b0000008-0000-4000-8000-000000000008",
       "name": "Notificar estado: completado",
@@ -522,7 +522,7 @@
     },
     {
       "parameters": {
-        "content": "## Migrar a la nube (Linux/Docker) con el PC apagado\n\n**1. Execute Command + dependencias.** En Docker, `yt-dlp` y `ffmpeg` deben ir DENTRO de la imagen (Dockerfile propio que extienda `n8nio/n8n:2.39.9` instalando yt-dlp y ffmpeg). También hace falta `NODES_EXCLUDE=[]` en el contenedor para que Execute Command esté disponible.\n\n**2. Rutas.** Sustituir `C:\\Users\\alvar\\.n8n-files\\reel.mp4` por una ruta Linux, p. ej. `/data/n8n-files/reel.mp4`, montada como volumen persistente. Hay que cambiarla en DOS nodos: \"Descargar vídeo (yt-dlp)\" y \"Leer vídeo desde disco\".\n\n**3. Binarios grandes.** Con vídeos grandes, considerar almacenamiento en fichero para binarios de n8n.\n\n**4. Alternativa sin yt-dlp (recomendada en cloud).** Sustituir \"Descargar vídeo (yt-dlp)\" por un HTTP Request a un servicio de descarga (p. ej. Apify Instagram Scraper) que devuelva el vídeo o una URL directa descargable, y ajustar \"Leer vídeo desde disco\".\n\n**5. Por qué:** desde IPs de datacenter, Instagram suele bloquear yt-dlp; Apify/proxy residencial es mucho más fiable sin depender de binarios del sistema.\n\n**6. Formulario.** Configurar `WEBHOOK_URL` con el dominio público para que la URL del formulario sea accesible desde fuera.",
+        "content": "## Migrar a la nube (Linux/Docker) con el PC apagado\n\n**1. Execute Command + dependencias.** En Docker, `yt-dlp` y `ffmpeg` deben ir DENTRO de la imagen (Dockerfile propio que extienda `n8nio/n8n:2.39.9` instalando yt-dlp y ffmpeg). También hace falta `NODES_EXCLUDE=[]` en el contenedor para que Execute Command esté disponible.\n\n**2. Rutas.** Sustituir `C:\\Users\\<usuario>\\.n8n-files\\reel.mp4` por una ruta Linux, p. ej. `/data/n8n-files/reel.mp4`, montada como volumen persistente. Hay que cambiarla en DOS nodos: \"Descargar vídeo (yt-dlp)\" y \"Leer vídeo desde disco\".\n\n**3. Binarios grandes.** Con vídeos grandes, considerar almacenamiento en fichero para binarios de n8n.\n\n**4. Alternativa sin yt-dlp (recomendada en cloud).** Sustituir \"Descargar vídeo (yt-dlp)\" por un HTTP Request a un servicio de descarga (p. ej. Apify Instagram Scraper) que devuelva el vídeo o una URL directa descargable, y ajustar \"Leer vídeo desde disco\".\n\n**5. Por qué:** desde IPs de datacenter, Instagram suele bloquear yt-dlp; Apify/proxy residencial es mucho más fiable sin depender de binarios del sistema.\n\n**6. Formulario.** Configurar `WEBHOOK_URL` con el dominio público para que la URL del formulario sea accesible desde fuera.",
         "height": 460,
         "width": 720,
         "color": 4
