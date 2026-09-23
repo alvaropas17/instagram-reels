@@ -1,0 +1,1094 @@
+{
+  "name": "Instagram Reel → Notas de vídeos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "guardar-reel-126b7352f15e7b0d",
+        "options": {}
+      },
+      "id": "f5ffb004-57be-4232-b671-b184bda22db8",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        128
+      ],
+      "webhookId": "7db01082-c992-4407-90ba-c8eab1be9131"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "url",
+              "name": "url",
+              "type": "string",
+              "value": "={{ $json.body && $json.body.enlace_reel ? $json.body.enlace_reel : $json.enlace_reel }}"
+            },
+            {
+              "id": "jobId",
+              "name": "jobId",
+              "type": "string",
+              "value": "={{ $json.body && $json.body.jobId ? $json.body.jobId : ($json.jobId || '') }}"
+            },
+            {
+              "id": "callbackBaseUrl",
+              "name": "callbackBaseUrl",
+              "type": "string",
+              "value": "={{ ($json.body && $json.body.callbackBaseUrl ? $json.body.callbackBaseUrl : ($json.callbackBaseUrl || 'http://localhost:3333')).replace(/\\/+$/, '') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d755424e-274c-483d-a188-5e6f4c24f82a",
+      "name": "Normalizar URL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -416,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.url }}",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              },
+              "rightValue": "instagram.com"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2ed28986-4b45-4da3-9097-aaf06c7480b1",
+      "name": "¿Enlace de Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=yt-dlp --impersonate chrome -t mp4 --no-playlist --force-overwrites --no-progress -o \"/home/node/.n8n-files/{{ $json.jobId }}.mp4\" \"{{ $json.url }}\""
+      },
+      "id": "7149d0ad-f4f3-4d4d-9bdb-e57a597d5f99",
+      "name": "Descargar vídeo (yt-dlp)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        672,
+        112
+      ],
+      "executeOnce": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/.n8n-files/{{ $('Normalizar URL').first().json.jobId }}.mp4",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "bd2a270b-6f68-4c9a-b1c1-3d2fd86bd635",
+      "name": "Leer vídeo desde disco",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst bin = item.binary && item.binary.data ? item.binary.data : undefined;\n\nlet size = undefined;\n\nif (bin && typeof bin.bytes === \"number\" && bin.bytes > 0) {\n  size = bin.bytes;\n}\nif (size === undefined && item.json && item.json.bytes !== undefined && item.json.bytes !== null) {\n  const n = Number(item.json.bytes);\n  if (Number.isFinite(n) && n > 0) size = n;\n}\nif (size === undefined && item.json && typeof item.json.fileSize === \"string\") {\n  const m = item.json.fileSize.match(/([\\d.,]+)\\s*(B|KB|MB|GB)?/i);\n  if (m) {\n    const val = Number(String(m[1]).replace(\",\", \".\"));\n    const unit = (m[2] || \"B\").toUpperCase();\n    const mult = unit === \"GB\" ? 1000000000 : unit === \"MB\" ? 1000000 : unit === \"KB\" ? 1000 : 1;\n    if (Number.isFinite(val) && val > 0) size = Math.round(val * mult);\n  }\n}\nif (size === undefined && bin && bin.data && typeof bin.data === \"string\") {\n  size = Math.floor((bin.data.length * 3) / 4);\n}\n\nif (!size || !Number.isFinite(size)) {\n  throw new Error(\"No se pudo determinar el tamano del video en bytes. Se descargo bien el fichero con yt-dlp?\");\n}\n\nconst mimeType = (item.json && item.json.mimeType) || (bin && bin.mimeType) || \"video/mp4\";\n\nreturn [{ json: { size: Number(size), mimeType }, binary: item.binary }];"
+      },
+      "id": "64e6240a-556a-4852-89ad-8ec17e9920bb",
+      "name": "Calcular tamaño y MIME",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/upload/v1beta/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-Upload-Protocol",
+              "value": "resumable"
+            },
+            {
+              "name": "X-Goog-Upload-Command",
+              "value": "start"
+            },
+            {
+              "name": "X-Goog-Upload-Header-Content-Length",
+              "value": "={{ $json.size }}"
+            },
+            {
+              "name": "X-Goog-Upload-Header-Content-Type",
+              "value": "video/mp4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": {
+          "file": {
+            "display_name": "reel"
+          }
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "cfb021ef-7d80-499f-9cac-fec7c3939c2e",
+      "name": "Iniciar subida (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1632,
+        112
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Iniciar subida (Gemini)').item.json.headers[\"x-goog-upload-url\"] }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-Upload-Offset",
+              "value": "0"
+            },
+            {
+              "name": "X-Goog-Upload-Command",
+              "value": "upload, finalize"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "0338967c-30bb-432d-91bf-ef9bf8e63bb9",
+      "name": "Subir bytes (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2096,
+        112
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "968496a4-e1eb-42cd-8b23-ed907466686a",
+      "name": "Esperar 2 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2560,
+        112
+      ],
+      "webhookId": "b70bc582-4991-4e41-be08-552488c483fe"
+    },
+    {
+      "parameters": {
+        "url": "=https://generativelanguage.googleapis.com/v1beta/{{ $json.file?.name || $json.name }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "options": {}
+      },
+      "id": "28e237ef-a0f7-4617-b10a-eb37b2137d5f",
+      "name": "Consultar estado (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2784,
+        112
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAX_INTENTOS = 30;\n\n// Contador persistente, reiniciado en cada ejecución del workflow.\nconst staticData = $getWorkflowStaticData('global');\nconst execId = $execution && $execution.id ? $execution.id : 'manual';\nif (staticData.execId !== execId) {\n  staticData.execId = execId;\n  staticData.intento = 0;\n}\nstaticData.intento = (staticData.intento || 0) + 1;\n\nconst item = $input.first();\nconst state = item.json.state;\nconst intento = staticData.intento;\n\nif (state !== 'ACTIVE' && intento >= MAX_INTENTOS) {\n  throw new Error('Gemini no terminó de procesar el vídeo tras ' + MAX_INTENTOS + ' intentos (~' + (MAX_INTENTOS * 2) + ' s). Último estado: ' + state);\n}\n\nreturn [{ json: { ...item.json, intento, maxIntentos: MAX_INTENTOS } }];"
+      },
+      "id": "a04d3c30-9294-4f21-b030-633429a35237",
+      "name": "Contar intento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "ACTIVE"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "83b12c8b-23cb-4669-80f2-62550ddc8d3d",
+      "name": "¿Vídeo activo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3216,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "file_data": {
+                    "mime_type": "video/mp4",
+                    "file_uri": "={{ $json.uri || $json.file?.uri }}"
+                  }
+                },
+                {
+                  "text": "Analiza el vídeo completo, tanto la imagen como el audio. Devuelve en español: un título corto, un resumen de 2-3 frases y entre 3 y 7 puntos clave accionables. Respeta el esquema JSON indicado."
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "type": "OBJECT",
+              "properties": {
+                "titulo": {
+                  "type": "STRING"
+                },
+                "resumen": {
+                  "type": "STRING"
+                },
+                "puntos_clave": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "STRING"
+                  }
+                }
+              },
+              "required": [
+                "titulo",
+                "resumen",
+                "puntos_clave"
+              ]
+            }
+          }
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "271c7200-63fa-4dd3-9f60-cf528801c820",
+      "name": "Generar contenido (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3600,
+        -32
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const gem = $input.first().json;\n\nlet text = \"\";\nconst parts = gem && gem.candidates && gem.candidates[0]\n  && gem.candidates[0].content && gem.candidates[0].content.parts;\nif (Array.isArray(parts)) {\n  text = parts.map(p => (p && p.text) ? p.text : \"\").join(\"\");\n}\n\nif (!text) {\n  const block = gem && gem.promptFeedback && gem.promptFeedback.blockReason;\n  const finish = gem && gem.candidates && gem.candidates[0] && gem.candidates[0].finishReason;\n  const rid = gem && gem.responseId;\n  throw new Error(\"Gemini no devolvio contenido\"\n    + (block ? \" (blockReason: \" + block + \")\" : \"\")\n    + (finish ? \" (finishReason: \" + finish + \")\" : \"\")\n    + (rid ? \" responseId=\" + rid : \"\")\n    + \". Revisa el contenido del video o los limites/cuota del modelo.\");\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error(\"No se pudo parsear el JSON devuelto por Gemini: \" + e.message + \" | Texto recibido: \" + String(text).slice(0, 500));\n}\n\nconst origen = $(\"Normalizar URL\").first().json;\nconst puntos = Array.isArray(parsed.puntos_clave) ? parsed.puntos_clave.map(String) : [];\n\nconst MAX_LEN = 2000;\nfunction splitTexto(str) {\n  const s = String(str === undefined || str === null ? \"\" : str);\n  if (s.length <= MAX_LEN) return [s];\n  const chunks = [];\n  let rest = s;\n  while (rest.length > MAX_LEN) {\n    let cut = rest.lastIndexOf(\" \", MAX_LEN);\n    if (cut <= 0) cut = MAX_LEN;\n    chunks.push(rest.slice(0, cut));\n    rest = rest.slice(cut).trimStart();\n  }\n  if (rest.length > 0) chunks.push(rest);\n  return chunks;\n}\nfunction richText(str) {\n  return splitTexto(str).map(c => ({ type: \"text\", text: { content: c } }));\n}\n\nconst children = [];\nchildren.push({ object: \"block\", type: \"divider\", divider: {} });\nchildren.push({ object: \"block\", type: \"heading_2\", heading_2: { rich_text: richText(\"Resumen\") } });\nchildren.push({ object: \"block\", type: \"paragraph\", paragraph: { rich_text: richText(parsed.resumen || \"\") } });\nchildren.push({ object: \"block\", type: \"heading_2\", heading_2: { rich_text: richText(\"Puntos clave\") } });\nfor (const punto of puntos) {\n  children.push({ object: \"block\", type: \"bulleted_list_item\", bulleted_list_item: { rich_text: richText(punto) } });\n}\nchildren.push({ object: \"block\", type: \"heading_2\", heading_2: { rich_text: richText(\"Enlace original\") } });\nconst enlace = String(origen.url || \"\");\nchildren.push({ object: \"block\", type: \"paragraph\", paragraph: { rich_text: [{ type: \"text\", text: { content: enlace, link: { url: enlace } } }] } });\n\nreturn [{\n  json: {\n    url: origen.url,\n    titulo: parsed.titulo,\n    resumen: parsed.resumen,\n    jobId: origen.jobId,\n    callbackBaseUrl: origen.callbackBaseUrl,\n    children\n  }\n}];"
+      },
+      "id": "b7e1a2c3-1111-4222-8333-aaaaaaaaaaaa",
+      "name": "Preparar datos para Notion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3776,
+        -32
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "69949705-f037-4e63-8cf2-07da1c2576f0"
+        },
+        "title": "={{ $json.titulo }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Enlace original|url",
+              "urlValue": "={{ $json.url }}"
+            },
+            {
+              "key": "Resumen|rich_text",
+              "textContent": "={{ $json.resumen }}"
+            },
+            {
+              "key": "Fecha|date",
+              "date": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0df086b-238a-4b45-9da7-01535af0d15c",
+      "name": "Guardar en Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        4192,
+        -32
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const wh = $('Webhook').first().json;\nconst src = (wh && wh.body) ? wh.body : (wh || {});\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || src.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(src.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'recibido', status: 'running', message: 'Enlace recibido' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000001-0000-4000-8000-000000000001",
+      "name": "Notificar estado: recibido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        128
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'validando', status: 'running', message: 'Validando enlace de Instagram' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000002-0000-4000-8000-000000000002",
+      "name": "Notificar estado: validando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        128
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'descargando', status: 'running', message: 'Descargando vídeo' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000003-0000-4000-8000-000000000003",
+      "name": "Notificar estado: descargando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        112
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'subiendo', status: 'running', message: 'Subiendo vídeo a Gemini' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000004-0000-4000-8000-000000000004",
+      "name": "Notificar estado: subiendo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        112
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'procesando', status: 'running', message: 'Procesando vídeo en Gemini' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000005-0000-4000-8000-000000000005",
+      "name": "Notificar estado: procesando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        112
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'generando', status: 'running', message: 'Generando resumen' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000006-0000-4000-8000-000000000006",
+      "name": "Notificar estado: generando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        -32
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'guardando', status: 'running', message: 'Guardando en Notion' };\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000007-0000-4000-8000-000000000007",
+      "name": "Notificar estado: guardando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        -32
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\n// Contrato exacto: { stage, status, message, notionPageUrl?, notionDatabaseUrl? }\nconst payload = { stage: 'completado', status: 'done', message: 'Listo' };\n\n// El $json actual es la respuesta del PATCH; la URL de la pagina sale de \"Guardar en Notion\".\nlet notionPageUrl = '';\ntry {\n  const guardado = $('Guardar en Notion').first();\n  notionPageUrl = (guardado && guardado.json && guardado.json.url) ? guardado.json.url : '';\n} catch (e) {\n  notionPageUrl = '';\n}\npayload.notionPageUrl = notionPageUrl;\npayload.notionDatabaseUrl = 'https://www.notion.so/69949705f0374e638cf207da1c2576f0';\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) {\n  // Tolerante a fallos: si la web local no responde, el flujo continua igual.\n}\n\n// Devolvemos los items de entrada INTACTOS (preserva el binario 'data' del video).\nreturn items;"
+      },
+      "id": "b0000008-0000-4000-8000-000000000008",
+      "name": "Notificar estado: completado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        -32
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Migrar a la nube (Linux/Docker) con el PC apagado\n\n**1. Execute Command + dependencias.** En Docker, `yt-dlp` y `ffmpeg` deben ir DENTRO de la imagen (Dockerfile propio que extienda `n8nio/n8n:2.39.9` instalando yt-dlp y ffmpeg). También hace falta `NODES_EXCLUDE=[]` en el contenedor para que Execute Command esté disponible.\n\n**2. Rutas.** Sustituir `C:\\Users\\alvar\\.n8n-files\\reel.mp4` por una ruta Linux, p. ej. `/data/n8n-files/reel.mp4`, montada como volumen persistente. Hay que cambiarla en DOS nodos: \"Descargar vídeo (yt-dlp)\" y \"Leer vídeo desde disco\".\n\n**3. Binarios grandes.** Con vídeos grandes, considerar almacenamiento en fichero para binarios de n8n.\n\n**4. Alternativa sin yt-dlp (recomendada en cloud).** Sustituir \"Descargar vídeo (yt-dlp)\" por un HTTP Request a un servicio de descarga (p. ej. Apify Instagram Scraper) que devuelva el vídeo o una URL directa descargable, y ajustar \"Leer vídeo desde disco\".\n\n**5. Por qué:** desde IPs de datacenter, Instagram suele bloquear yt-dlp; Apify/proxy residencial es mucho más fiable sin depender de binarios del sistema.\n\n**6. Formulario.** Configurar `WEBHOOK_URL` con el dominio público para que la URL del formulario sea accesible desde fuera.",
+        "height": 460,
+        "width": 720,
+        "color": 4
+      },
+      "id": "c985eeb4-d5c6-46c7-8e33-5d595ac3905b",
+      "name": "Sticky Note c985eeb4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        832,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/.n8n-files/{{ $('Normalizar URL').first().json.jobId }}.mp4",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Releer vídeo para subida",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1888,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.notion.com/v1/blocks/{{ $json.id }}/children",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-02-22"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ children: $('Preparar datos para Notion').item.json.children }) }}",
+        "options": {}
+      },
+      "id": "fd1eea3a-a977-4fa1-a7d8-7ded47cb6af5",
+      "name": "Añadir contenido a la ficha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        4368,
+        -32
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "752fc8b9-59e6-477b-b7aa-960822f93140",
+      "name": "Notificar estado: error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        160
+      ],
+      "parameters": {
+        "jsCode": "// Reporta el fallo segun contrato v2.\nconst origen = $('Normalizar URL').first().json;\nlet callbackBaseUrl = String($env.CALLBACK_BASE_URL || origen.callbackBaseUrl || 'http://localhost:3333');\nif (callbackBaseUrl.endsWith('/')) callbackBaseUrl = callbackBaseUrl.slice(0, -1);\nconst url = callbackBaseUrl + '/api/internal/reels/' + encodeURIComponent(origen.jobId || 'desconocido') + '/status';\n\nconst j = $json || {};\nconst err = j.error;\nconst pick = (v) => (v === undefined || v === null) ? '' : String(v);\n\nlet rawMessage = '';\nlet httpCode;\nlet retryAfterHeader;\nconst technicalParts = [];\n\nif (typeof err === 'string') {\n  rawMessage = err;\n} else if (err && typeof err === 'object') {\n  rawMessage = pick(err.message) || pick(err.description);\n  httpCode = err.httpCode !== undefined ? err.httpCode\n    : (err.statusCode !== undefined ? err.statusCode : (err.response && err.response.status));\n  const headers = err.response && err.response.headers ? err.response.headers : undefined;\n  if (headers) retryAfterHeader = headers['retry-after'] !== undefined ? headers['retry-after'] : headers['Retry-After'];\n  if (err.description && pick(err.description) !== rawMessage) technicalParts.push(pick(err.description));\n  if (err.reason) technicalParts.push(pick(err.reason));\n  if (err.response && err.response.body !== undefined) {\n    const body = err.response.body;\n    technicalParts.push(typeof body === 'string' ? body : JSON.stringify(body));\n  }\n  if (err.stack) technicalParts.push(pick(err.stack));\n}\nif (!rawMessage) rawMessage = pick(j.message) || pick(j.description) || 'Error en el flujo de la reel';\n\nconst message = String(rawMessage).replace(/[\\r\\n\"]+/g, ' ').slice(0, 300);\nconst technical = technicalParts.join(' | ').replace(/[\\r\\n]+/g, ' ').slice(0, 500);\nconst haystack = (String(rawMessage) + ' ' + technical + ' ' + pick(j.message) + ' ' + pick(j.description)).toLowerCase();\n\nconst ALLOWLIST = ['INVALID_LINK','VIDEO_UNAVAILABLE','DOWNLOAD_FAILED','UPLOAD_FAILED','CONTENT_BLOCKED','QUOTA_EXCEEDED','TIMEOUT','NOTION_ERROR','INTERNAL'];\nlet errorCode = pick(j.errorCode).toUpperCase();\nif (!ALLOWLIST.includes(errorCode)) errorCode = '';\n\nconst stageHint = pick(j.failedStage).toLowerCase();\nconst VALID_STAGES = ['validando','descargando','subiendo','procesando','generando','guardando'];\n\nif (!errorCode) {\n  if (stageHint === 'guardando') {\n    errorCode = 'NOTION_ERROR';\n  } else if (/PROHIBITED_CONTENT|blockreason|no devolvi[oó] contenido/i.test(haystack)) {\n    errorCode = 'CONTENT_BLOCKED';\n  } else if (Number(httpCode) === 429 || /RESOURCE_EXHAUSTED|quota|too many requests/i.test(haystack)) {\n    errorCode = 'QUOTA_EXCEEDED';\n  } else if (/timeout|timed out|etimedout/i.test(haystack)) {\n    errorCode = 'TIMEOUT';\n  } else if (/notion/i.test(haystack)) {\n    errorCode = 'NOTION_ERROR';\n  } else if (stageHint === 'descargando') {\n    errorCode = /private|unavailable|no longer available|deleted|removed|not available|does not exist|login required|sign in|age.?restricted/i.test(haystack)\n      ? 'VIDEO_UNAVAILABLE'\n      : 'DOWNLOAD_FAILED';\n  } else if (stageHint === 'subiendo') {\n    errorCode = 'UPLOAD_FAILED';\n  } else {\n    errorCode = 'INTERNAL';\n  }\n}\n\nlet stage = VALID_STAGES.includes(stageHint) ? stageHint : '';\nif (!stage) {\n  const STAGE_BY_CODE = {\n    INVALID_LINK: 'validando',\n    VIDEO_UNAVAILABLE: 'descargando',\n    DOWNLOAD_FAILED: 'descargando',\n    UPLOAD_FAILED: 'subiendo',\n    CONTENT_BLOCKED: 'generando',\n    QUOTA_EXCEEDED: 'generando',\n    NOTION_ERROR: 'guardando',\n  };\n  stage = STAGE_BY_CODE[errorCode] || '';\n}\nif (!stage) {\n  const fases = ['guardando','generando','procesando','subiendo','descargando','validando'];\n  for (const f of fases) {\n    try {\n      $('Notificar estado: ' + f).first();\n      stage = f;\n      break;\n    } catch (e) { /* fase no ejecutada */ }\n  }\n  if (!stage) stage = 'validando';\n}\n\nconst META = {\n  INVALID_LINK:      { retryable: false, action: 'choose_another' },\n  VIDEO_UNAVAILABLE: { retryable: false, action: 'choose_another' },\n  DOWNLOAD_FAILED:   { retryable: true,  action: 'retry' },\n  UPLOAD_FAILED:     { retryable: true,  action: 'retry' },\n  CONTENT_BLOCKED:   { retryable: false, action: 'choose_another' },\n  QUOTA_EXCEEDED:    { retryable: true,  action: 'wait' },\n  TIMEOUT:           { retryable: true,  action: 'retry' },\n  NOTION_ERROR:      { retryable: true,  action: 'retry' },\n  INTERNAL:          { retryable: false, action: 'contact' },\n};\nconst meta = META[errorCode] || META.INTERNAL;\n\nconst payload = {\n  stage,\n  status: 'error',\n  message,\n  errorCode,\n  retryable: meta.retryable,\n  action: meta.action,\n};\nif (errorCode === 'QUOTA_EXCEEDED') {\n  const ra = parseInt(retryAfterHeader, 10);\n  payload.retryAfterSeconds = (Number.isFinite(ra) && ra > 0) ? ra : 60;\n}\nif (technical) payload.technical = technical;\n\nlet attempt;\nlet maxAttempts;\nif (typeof j.attempt === 'number') attempt = j.attempt;\nelse if (typeof j.intento === 'number') attempt = j.intento;\nif (typeof j.maxAttempts === 'number') maxAttempts = j.maxAttempts;\nelse if (typeof j.maxIntentos === 'number') maxAttempts = j.maxIntentos;\nif (attempt === undefined || maxAttempts === undefined) {\n  try {\n    const c = $('Contar intento').first().json;\n    if (attempt === undefined && typeof c.intento === 'number') attempt = c.intento;\n    if (maxAttempts === undefined && typeof c.maxIntentos === 'number') maxAttempts = c.maxIntentos;\n  } catch (e) { /* aun no habia contador */ }\n}\nif (attempt !== undefined) payload.attempt = attempt;\nif (maxAttempts !== undefined) payload.maxAttempts = maxAttempts;\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url,\n    headers: {\n      'Content-Type': 'application/json',\n      'x-callback-secret': String($env.CALLBACK_SECRET || ''),\n    },\n    body: JSON.stringify(payload),\n    timeout: 15000,\n  });\n} catch (e) { /* tolerante */ }\n\nreturn items;"
+      }
+    },
+    {
+      "id": "04a89fd2-b00a-4475-83f6-ef698e58ce14",
+      "name": "Contexto error: descargando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        288
+      ],
+      "parameters": {
+        "jsCode": "return items.map((item) => ({\n  ...item,\n  json: { ...(item.json || {}), failedStage: 'descargando' },\n}));"
+      }
+    },
+    {
+      "id": "97393048-a365-435e-9b46-6700fbeb36a3",
+      "name": "Contexto error: subiendo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        288
+      ],
+      "parameters": {
+        "jsCode": "return items.map((item) => ({\n  ...item,\n  json: { ...(item.json || {}), failedStage: 'subiendo' },\n}));"
+      }
+    },
+    {
+      "id": "9a4d8590-37d2-4a83-b431-4a49b43aeea3",
+      "name": "Contexto error: procesando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2784,
+        288
+      ],
+      "parameters": {
+        "jsCode": "return items.map((item) => ({\n  ...item,\n  json: { ...(item.json || {}), failedStage: 'procesando' },\n}));"
+      }
+    },
+    {
+      "id": "1878af8c-a3bd-4aa3-b1da-7dc97df22d3a",
+      "name": "Contexto error: generando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        112
+      ],
+      "parameters": {
+        "jsCode": "return items.map((item) => ({\n  ...item,\n  json: { ...(item.json || {}), failedStage: 'generando' },\n}));"
+      }
+    },
+    {
+      "id": "0230c30b-6c31-4723-97b5-f2072f3fcda7",
+      "name": "Contexto error: guardando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        112
+      ],
+      "parameters": {
+        "jsCode": "return items.map((item) => ({\n  ...item,\n  json: { ...(item.json || {}), failedStage: 'guardando' },\n}));"
+      }
+    },
+    {
+      "id": "ca5689dc-5bf7-4c18-8871-71b767329a99",
+      "name": "Error: enlace no válido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        336
+      ],
+      "parameters": {
+        "jsCode": "const mensaje = 'El enlace no parece de Instagram (no contiene \"instagram.com\"). Revisa el campo \"Enlace del Reel\" e intentalo de nuevo.';\nreturn [{ json: { error: mensaje, errorCode: 'INVALID_LINK', failedStage: 'validando' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: recibido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: recibido": {
+      "main": [
+        [
+          {
+            "node": "Normalizar URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar URL": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: validando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: validando": {
+      "main": [
+        [
+          {
+            "node": "¿Enlace de Instagram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enlace de Instagram?": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: descargando",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: enlace no válido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: descargando": {
+      "main": [
+        [
+          {
+            "node": "Descargar vídeo (yt-dlp)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar vídeo (yt-dlp)": {
+      "main": [
+        [
+          {
+            "node": "Leer vídeo desde disco",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: descargando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer vídeo desde disco": {
+      "main": [
+        [
+          {
+            "node": "Calcular tamaño y MIME",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular tamaño y MIME": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: subiendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: subiendo": {
+      "main": [
+        [
+          {
+            "node": "Iniciar subida (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iniciar subida (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Releer vídeo para subida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: subiendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Releer vídeo para subida": {
+      "main": [
+        [
+          {
+            "node": "Subir bytes (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir bytes (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: procesando",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: subiendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: procesando": {
+      "main": [
+        [
+          {
+            "node": "Esperar 2 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar 2 s": {
+      "main": [
+        [
+          {
+            "node": "Consultar estado (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar estado (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Contar intento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: procesando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contar intento": {
+      "main": [
+        [
+          {
+            "node": "¿Vídeo activo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Vídeo activo?": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: generando",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Esperar 2 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: generando": {
+      "main": [
+        [
+          {
+            "node": "Generar contenido (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar contenido (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Preparar datos para Notion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: generando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar datos para Notion": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: guardando",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: generando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar estado: guardando": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Notion": {
+      "main": [
+        [
+          {
+            "node": "Añadir contenido a la ficha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: guardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Añadir contenido a la ficha": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: completado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto error: guardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: enlace no válido": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto error: descargando": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto error: subiendo": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto error: procesando": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto error: generando": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto error: guardando": {
+      "main": [
+        [
+          {
+            "node": "Notificar estado: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Madrid",
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "pinData": {}
+}
